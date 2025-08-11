@@ -248,9 +248,9 @@ server <- function(input, output, session) {
     validate(
       need(input$minage_start <= input$maxage_start, "Minimum age must be ≤ maximum age."),
       need(input$N > 0,                          "Sample size must be positive."),
-      need(input$time_sick > 0,                  "Duration of illness must be positive."),
-      need(file.exists(incMalePath) && file.exists(incFemalePath),
-           "Incidence data not found in the data folder.")
+      need(input$time_sick > 0,                  "Duration of illness must be positive.")#,
+      # need(file.exists(incMalePath) && file.exists(incFemalePath),
+      #      "Incidence data not found in the data folder.")
     )
 
     withProgress(message = "Running simulation...", value = 0.1, {
