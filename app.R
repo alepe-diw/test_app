@@ -38,7 +38,7 @@ run_sim <- function(time_sick_days = 14,
                     prop_female    = .5,
                     minage_start   = 18,
                     maxage_start   = 80,
-                    N              = 10000) {
+                    N              = 1000) {
   
   # checking if the input is valid
   stopifnot(minage_start <= maxage_start,
@@ -224,8 +224,8 @@ ui <- fluidPage(
   sidebarLayout(
     sidebarPanel(width = 3,
                  numericInput("N", "Sample size (N)",
-                              value = 10000, min = 1000,
-                              max = 100000, step = 1000),
+                              value = 1000, min = 1000,
+                              max = 10000, step = 500),
                  # sliderInput ("prop_female", "Proportion female (%)",
                  # min = 0,  max = 100, value = 50, step = 1),
                  sliderInput("minage_start", "Minimum age at start",
