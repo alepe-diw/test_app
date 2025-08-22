@@ -35,7 +35,8 @@ incFemalePath <- "./data/SurvStat_female_data.rds"
 # which includes the necessary pre and post processing
 run_sim <- function(time_sick_days = 14,
                     effect_int     = 0,
-                    prop_female    = .5,
+                    prop_female    = 0.5,
+                    date_int       = as.Date("2020-01-01"),
                     minage_start   = 18,
                     maxage_start   = 80,
                     N              = 1000) {
@@ -50,6 +51,8 @@ run_sim <- function(time_sick_days = 14,
   time_sick <- time_sick_days / 365
   N_female  <- trunc(N * (prop_female))
   N_male    <- N - N_female
+  start_yr  <- as.Date(sprintf("%s-01-01", format(date_int, "%Y")))
+  date_int  <- as.numeric(format(date_int, "%Y")) + as.numeric(date_int - start_yr) / 365.25
   
   # seed for reproducibility
   set.seed(9876)
@@ -88,14 +91,20 @@ run_sim <- function(time_sick_days = 14,
   inc_rate_m <- function(age, calTime, duration) {
     col_index <- pmin(floor(age) + 1, ageBands)           # ages > 80 go to last band
     row_index <- findInterval(calTime, decYears)
-    (1 - effect_int) * inc_mat_m[cbind(row_index, col_index)]
+    rate      <- ifelse(calTime >= date_int, 
+                        (1 - effect_int) * inc_mat_m[cbind(row_index, col_index)],
+                        inc_mat_m[cbind(row_index, col_index)])
+    rate
   }
   assign("inc_rate_m", inc_rate_m, envir = .GlobalEnv)
   
   inc_rate_f <- function(age, calTime, duration) {
     col_index <- pmin(floor(age) + 1, ageBands)           # ages > 80 go to last band
     row_index <- findInterval(calTime, decYears)
-    (1 - effect_int) * inc_mat_f[cbind(row_index, col_index)]
+    rate      <- ifelse(calTime >= date_int, 
+                        (1 - effect_int) * inc_mat_f[cbind(row_index, col_index)],
+                        inc_mat_f[cbind(row_index, col_index)])
+    rate
   }
   assign("inc_rate_f", inc_rate_f, envir = .GlobalEnv)
   
@@ -162,12 +171,12 @@ run_sim <- function(time_sick_days = 14,
       cum_recovered_pct  = 0L,
       susceptible_pct    = 100L
     )
-
+    
     return(metrics)
   }
-    
-    
-    # processing the output ---------------------------------------------------
+  
+  
+  # processing the output ---------------------------------------------------
   long <- as.data.table(convertToLongFormat(pop))
   long[, `:=`(start = as.IDate(Tstart, "%Y%m%d"),
               stop  = as.IDate(Tstop,  "%Y%m%d"))]
@@ -220,36 +229,83 @@ run_sim <- function(time_sick_days = 14,
 
 # Shiny UI ----------------------------------------------------------------
 ui <- fluidPage(
+  tags$head(tags$style(HTML("
+    .container-fluid { max-width: 1200px; }
+    .btn { border-radius: 8px; }
+    .form-control, .irs { border-radius: 8px; }
+    .shiny-output-error-validation { color: #b00020; }
+  "))),
   titlePanel("Simulation of COVID-19 Infections in Germany (2020–2021)"),
   sidebarLayout(
-    sidebarPanel(width = 3,
-                 numericInput("N", "Sample size (N)",
-                              value = 1000, min = 1000,
-                              max = 10000, step = 500),
-                 # sliderInput ("prop_female", "Proportion female (%)",
-                 # min = 0,  max = 100, value = 50, step = 1),
-                 sliderInput("minage_start", "Minimum age at start",
-                             min = 0,  max = 100, value = 18),
-                 sliderInput("maxage_start", "Maximum age at start",
-                             min = 0,  max = 100, value = 80),
-                 numericInput("time_sick", "Duration of illness (days)",
-                              value = 14,  min = 1,  max = 60),
-                 sliderInput("effect_int", "Intervention effectiveness (%)",
-                             min = 0,  max = 100, value = 0, step = 1),
-                 bsPopover(
-                   id        = "effect_int",
-                   title     = "What does this do?",
-                   content   = paste(
-                     "This applies a percentage reduction to all the incidence rates.",
-                     "For example, 25% means the incidence rates are all multiplied by 0.75."
-                   ),
-                   placement = "right",
-                   trigger   = "hover"
-                 ),
-                 actionButton("run", "Run simulation", class = "btn-primary")
+    sidebarPanel(
+      width = 3,
+      numericInput("N", "Sample size (N)",
+                   value = 1000, min = 1000, max = 10000, step = 500),
+      # sliderInput ("prop_female", "Proportion female (%)",
+      # min = 0,  max = 100, value = 50, step = 1),
+      
+      sliderInput("minage_start", "Minimum age at start", 
+                  min = 0,  max = 100, value = 18),
+      sliderInput("maxage_start", "Maximum age at start", 
+                  min = 0,  max = 100, value = 80),
+      
+      numericInput("time_sick", "Duration of illness (days)",
+                   value = 14,  min = 1,  max = 60),
+      
+      sliderInput("effect_int", "Intervention effectiveness (%)",
+                  min = 0,  max = 100, value = 0, step = 1),
+      bsPopover(
+        id        = "effect_int",
+        title     = "What does this do?",
+        content   = paste(
+          "Reduces all incidence rates by this percent from the chosen start date.",
+          "For example, 25% means the incidence rates are all multiplied by 0.75."
+        ),
+        placement = "right",
+        trigger   = "hover"
+      ),
+      
+      conditionalPanel(
+        condition = "input.effect_int > 0",
+        dateInput(inputId = "date_int", 
+                  label = "Intervention starts", 
+                  value = "2020-01-01", min = "2020-01-01", max = "2021-12-31", 
+                  format = "yyyy-mm-dd")
+      ),
+      
+      div(
+        class = "form-group shiny-input-container mb-3",  # matches Shiny input wrappers (BS3/BS5+bslib)
+        tags$label("Display options", class = "control-label form-label"),
+        checkboxInput("by_sex", "Break down by sex", FALSE),
+        checkboxGroupInput("series", "Show series",
+                           choices  = c("Infected (14-day active)" = "inf",
+                                        "Recovered (cumulative)"   = "rec",
+                                        "Susceptible"              = "sus"),
+                           selected = c("inf","rec")
+        )
+      ),
+      #checkboxInput("by_sex", "Break down by sex", FALSE),
+      
+      # checkboxGroupInput("series", "Show series", 
+      #                    choices = c("Infected (14‑day active)" = "inf", 
+      #                                "Recovered (cumulative)"   = "rec",
+      #                                "Susceptible"              = "sus"),
+      #                    selected = c("inf","rec")
+      # ),
+      
+      actionButton("run", "Run simulation", class = "btn-primary")
     ),
-    mainPanel(width = 9,
-              plotOutput("epiPlot", height = "600px")
+    
+    mainPanel(
+      width = 9,
+      fluidRow(
+        column(4, uiOutput("kpi_peak")),
+        column(4, uiOutput("kpi_peak_date")),
+        column(4, uiOutput("kpi_recovered"))
+      ),
+      plotOutput("epiPlot", height = "600px"),
+      downloadButton("dl_csv", "Download metrics (CSV)", class = "btn btn-outline-secondary me-2"),
+      downloadButton("dl_png", "Download plot (PNG)", class = "btn btn-outline-secondary")
     )
   )
 )
@@ -257,6 +313,16 @@ ui <- fluidPage(
 
 # Shiny server ------------------------------------------------------------
 server <- function(input, output, session) {
+  
+  # keep age sliders consistent
+  observeEvent(input$minage_start, {
+    if (input$minage_start > input$maxage_start)
+      updateSliderInput(session, "maxage_start", value = input$minage_start)
+  })
+  observeEvent(input$maxage_start, {
+    if (input$maxage_start < input$minage_start)
+      updateSliderInput(session, "minage_start", value = input$maxage_start)
+  })
   
   # storing results of last simulation run
   metricsData <- eventReactive(input$run, {
@@ -277,27 +343,146 @@ server <- function(input, output, session) {
                          #prop_female    = 0.5, #input$prop_female / 100,
                          minage_start   = input$minage_start,
                          maxage_start   = input$maxage_start,
-                         N              = input$N)
+                         N              = input$N,
+                         date_int       = input$date_int)
       incProgress(0.9)
       metrics
     })
   })
   
-  # plot output
-  output$epiPlot <- renderPlot({
-    metrics_dat <- metricsData()
-    req(metrics_dat)
+  kpi_box <- function(title, value) {
+    div(class="p-3 border rounded mb-3",
+        tags$div(class="text-muted small", title),
+        tags$div(class="h4 mb-0", value))
+  }
+  
+  kpi_dual <- function(title, female_value, male_value) {
+    div(class="p-3 border rounded mb-3",
+        tags$div(class="text-muted small", title),
+        div(class="d-flex justify-content-between gap-3",
+            div(class="flex-fill",
+                tags$div(class="small text-muted", "Female"),
+                tags$div(class="h4 mb-0", female_value)
+            ),
+            div(class="flex-fill",
+                tags$div(class="small text-muted", "Male"),
+                tags$div(class="h4 mb-0", male_value)
+            )
+        )
+    )
+  }
+  
+  output$kpi_peak <- renderUI({
+    dat <- metricsData()
+    req(nrow(dat))
     
-    plot_dat <- metrics_dat[sex == "Overall", ]
-    
-    ggplot(plot_dat, aes(x = date)) +
-      geom_line(aes(y = active_inf_14d_pct, colour = "Infected")) +
-      geom_line(aes(y = cum_recovered_pct,  colour = "Recovered")) +
-      #facet_wrap(.~sex) +
-      scale_y_continuous(labels = scales::comma_format(accuracy = 0.1)) +
-      labs(x = "Date", y = "Percentage of total cohort", colour = NULL) +
-      theme_minimal(base_size = 14)
+    if (isTRUE(input$by_sex)) {
+      df <- dat[sex == "Female"]; dm <- dat[sex == "Male"]
+      kpi_dual(
+        "Peak infected (14-day active)",
+        sprintf("%0.1f%%", max(df$active_inf_14d_pct, na.rm = TRUE)),
+        sprintf("%0.1f%%", max(dm$active_inf_14d_pct, na.rm = TRUE))
+      )
+    } else {
+      d <- dat[sex == "Overall"]
+      kpi_box("Peak infected (14-day active)",
+              sprintf("%0.1f%%", max(d$active_inf_14d_pct, na.rm = TRUE)))
+    }
   })
+  
+  output$kpi_peak_date <- renderUI({
+    dat <- metricsData()
+    req(nrow(dat))
+    
+    if (isTRUE(input$by_sex)) {
+      df <- dat[sex == "Female"]; dm <- dat[sex == "Male"]
+      idx_f <- which.max(df$active_inf_14d_pct)
+      idx_m <- which.max(dm$active_inf_14d_pct)
+      kpi_dual(
+        "Peak date",
+        format(df$date[idx_f], "%b %d, %Y"),
+        format(dm$date[idx_m], "%b %d, %Y")
+      )
+    } else {
+      d <- dat[sex == "Overall"]; idx <- which.max(d$active_inf_14d_pct)
+      kpi_box("Peak date", format(d$date[idx], "%b %d, %Y"))
+    }
+  })
+  
+  output$kpi_recovered <- renderUI({
+    dat <- metricsData()
+    req(nrow(dat))
+    
+    if (isTRUE(input$by_sex)) {
+      df <- dat[sex == "Female"]; dm <- dat[sex == "Male"]
+      kpi_dual(
+        "Recovered by end",
+        sprintf("%0.1f%%", tail(df$cum_recovered_pct, 1)),
+        sprintf("%0.1f%%", tail(dm$cum_recovered_pct, 1))
+      )
+    } else {
+      d <- dat[sex == "Overall"]
+      kpi_box("Recovered by end", sprintf("%0.1f%%", tail(d$cum_recovered_pct, 1)))
+    }
+  })
+  
+  plotObj <- reactive({
+    dat <- metricsData()
+    req(nrow(dat))
+    
+    plot_dat <- if (isTRUE(input$by_sex)) dat[sex != "Overall"] else dat[sex == "Overall"]
+    
+    y_map <- list(
+      inf = "active_inf_14d_pct",
+      rec = "cum_recovered_pct",
+      sus = "susceptible_pct"
+    )
+    chosen <- unlist(y_map[input$series], use.names = FALSE)
+    req(length(chosen) > 0)
+    
+    long <- data.table::melt(
+      plot_dat,
+      id.vars = c("sex","date"),
+      measure.vars = chosen,
+      variable.name = "metric",
+      value.name = "pct"
+    )
+    metric_labels <- c(active_inf_14d_pct = "Infected (14‑day active)",
+                       cum_recovered_pct  = "Recovered (cumulative)",
+                       susceptible_pct    = "Susceptible")
+    long[, metric := factor(metric, levels = names(metric_labels), labels = unname(metric_labels))]
+    
+    p <- ggplot(long, aes(x = date, y = pct, colour = metric)) +
+      geom_line(linewidth = 0.9) +
+      { if (isTRUE(input$by_sex)) facet_wrap(~sex, ncol = 1) else NULL } +
+      scale_y_continuous(labels = scales::label_percent(accuracy = 0.1, scale = 1)) +
+      labs(x = "Date", y = "Percent of cohort", colour = NULL) +
+      theme_light(base_size = 14) +
+      theme(legend.position = "top", panel.grid.minor = element_blank())
+    
+    if (!is.null(input$effect_int) && input$effect_int > 0 && !is.null(input$date_int)) {
+      p <- p +
+        geom_vline(xintercept = as.Date(input$date_int), linetype = 2) +
+        annotate("label", x = as.Date(input$date_int), y = Inf, vjust = 1,
+                 label = "Intervention", size = 3)
+    }
+    p
+  })
+  
+  # render plot
+  output$epiPlot <- renderPlot({ plotObj() })
+  
+  output$dl_csv <- downloadHandler(
+    filename = function() sprintf("simulation_metrics_%s.csv", Sys.Date()),
+    content = function(file) data.table::fwrite(metricsData(), file)
+  )
+  output$dl_png <- downloadHandler(
+    filename = function() sprintf("simulation_plot_%s.png", Sys.Date()),
+    content = function(file) {
+      ggplot2::ggsave(filename = file, plot = plotObj(), width = 10, height = 6, dpi = 150)
+    }
+  )
+
 }
 
 # launch ------------------------------------------------------------------
