@@ -7,7 +7,7 @@
 if (FALSE) {
   library(shiny); library(shinyBS); library(ggplot2); library(data.table); 
   library(MicSim); library(munsell); library(colorspace); library(snowfall)
-  library(rlecuyer); library(snow); 
+  library(rlecuyer); library(snow) 
 }
 
 # loading libraries -------------------------------------------------------
@@ -259,16 +259,17 @@ summary_indicators <- function(dt) {
 # formatting numbers
 fmt_pct <- function(x, d=1) ifelse(is.finite(x), sprintf(paste0("%0.", d, "f%%"), x), "—")
 
-# assigning labels and colors to different indicators
+# assigning labels and colors to different indicators. 
+# using SOEP colors for now
 metric_labels <- c(
   active_inf_14d_pct = "Infected (14-day active)",
   cum_recovered_pct  = "Recovered (cumulative)",
   susceptible_pct    = "Susceptible"
 )
 metric_colors <- c(
-  "Infected (14-day active)" = "#D55E00", # vermillion
-  "Recovered (cumulative)"   = "#009E73", # green
-  "Susceptible"              = "#0072B2"  # blue
+  "Infected (14-day active)" = "#ae393f",
+  "Recovered (cumulative)"   = "#00786b", 
+  "Susceptible"              = "#5e7c8f"  
 )
 linetype_vals <- c("Baseline" = "solid", "Intervention" = "longdash")
 
