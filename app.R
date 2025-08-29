@@ -1,13 +1,13 @@
 ###############################################################################
 # app.R – Shiny demo, which simulates COVID-19 infections between 2020 and 2021
-# Date  : 2025-07-25
+# Date  : 2025-08-19
 ###############################################################################
 
-# Needed when setting-up shinylive, so packages are correctly included
+# needed when setting-up shinylive, so packages are correctly included
 if (FALSE) {
   library(shiny); library(shinyBS); library(ggplot2); library(data.table); 
   library(MicSim); library(munsell); library(colorspace); library(snowfall)
-  library(rlecuyer); library(snow) 
+  library(rlecuyer); library(snow)
 }
 
 # loading libraries -------------------------------------------------------
@@ -19,11 +19,11 @@ library(ggplot2)
 
 
 # defining constants ------------------------------------------------------
-startDate  <- 20200101 # yyyymmdd
-endDate    <- 20211231 # yyyymmdd
-simHorizon <- c(startDate = startDate, endDate = endDate)
-maxAge     <- 101
-absStates  <- "dead"   # required by MicSim
+startDate   <- 20200101   # yyyymmdd
+endDate     <- 20211231   # yyyymmdd
+simHorizon  <- c(startDate = startDate, endDate = endDate)
+maxAge      <- 101
+absStates   <- "dead"      # required by MicSim
 
 # setting path to data
 incMalePath   <- "./data/SurvStat_male_data.rds"
@@ -31,22 +31,20 @@ incFemalePath <- "./data/SurvStat_female_data.rds"
 
 
 # function to run the sim -------------------------------------------------
-# Defining a function to run the simulation,
+# defining a function to run the simulation,
 # which includes the necessary pre and post processing
 run_sim <- function(time_sick_days = 14,
                     effect_int     = 0,
-                    prop_female    = 0.5,
+                    prop_female    = .5,
                     date_int       = as.Date("2020-01-01"),
                     minage_start   = 18,
                     maxage_start   = 80,
                     N              = 1000) {
   
   # checking if the input is valid
-  stopifnot(
-    prop_female >= 0, prop_female <= 1,
-    effect_int  >= 0, effect_int  <= 1,
-    N > 0, time_sick_days > 0
-  )
+  stopifnot(prop_female  >= 0, prop_female <= 1,
+            effect_int   >= 0, effect_int  <= 1,
+            N > 0, time_sick_days > 0)
   
   # defining initial variables
   time_sick <- time_sick_days / 365
@@ -60,7 +58,7 @@ run_sim <- function(time_sick_days = 14,
   set.seed(9876)
   
   
-  # Defining initial pop ----------------------------------------------------
+  # defining initial pop ----------------------------------------------------
   # setting reference data as jan 1st of the start year
   ref_date <- as.POSIXct(
     paste0(substr(startDate, 1, 4), "-01-01 00:00:00"),
@@ -68,7 +66,7 @@ run_sim <- function(time_sick_days = 14,
   )
   
   # building function to return birthdays as strings in YYYYMMDD format
-  init_bd <- function(n) {
+  init_bd  <- function(n) {
     ages <- runif(n, min = minage_start, max = maxage_start)
     format(as.Date(ref_date - ages * 365.25 * 24 * 3600), "%Y%m%d")
   }
@@ -77,8 +75,7 @@ run_sim <- function(time_sick_days = 14,
     ID        = 1:N,
     birthDate = c(init_bd(N_female), init_bd(N_male)),
     initState = c(rep("Susceptible/Female", N_female),
-                  rep("Susceptible/Male", N_male)
-    )
+                  rep("Susceptible/Male", N_male))
   )
   
   
@@ -87,32 +84,30 @@ run_sim <- function(time_sick_days = 14,
   inc_dat_f <- readRDS(incFemalePath)
   
   decYears  <- c(2020, inc_dat_m[[1]])
-  inc_mat_m <- as.matrix(inc_dat_m[, -1])
-  inc_mat_f <- as.matrix(inc_dat_f[, -1])
+  inc_mat_m <- as.matrix(inc_dat_m[,-1])
+  inc_mat_f <- as.matrix(inc_dat_f[,-1])
   ageBands  <- ncol(inc_mat_m)
   
   
   # defining transition rates -----------------------------------------------
   inc_rate_m <- function(age, calTime, duration) {
-    col_index <- pmin(floor(age) + 1, ageBands) # ages > 80 go to last band
+    col_index <- pmin(floor(age) + 1, ageBands)           # ages > 80 go to last band
     row_index <- findInterval(calTime, decYears)
     
     rate <- ifelse(calTime >= date_int,
                    (1 - effect_int) * inc_mat_m[cbind(row_index, col_index)],
-                   inc_mat_m[cbind(row_index, col_index)]
-    )
+                   inc_mat_m[cbind(row_index, col_index)])
     rate
   }
   assign("inc_rate_m", inc_rate_m, envir = .GlobalEnv)
   
   inc_rate_f <- function(age, calTime, duration) {
-    col_index <- pmin(floor(age) + 1, ageBands) # ages > 80 go to last band
+    col_index <- pmin(floor(age) + 1, ageBands)           # ages > 80 go to last band
     row_index <- findInterval(calTime, decYears)
     
     rate <- ifelse(calTime >= date_int,
                    (1 - effect_int) * inc_mat_f[cbind(row_index, col_index)],
-                   inc_mat_f[cbind(row_index, col_index)]
-    )
+                   inc_mat_f[cbind(row_index, col_index)])
     rate
   }
   assign("inc_rate_f", inc_rate_f, envir = .GlobalEnv)
@@ -120,7 +115,7 @@ run_sim <- function(time_sick_days = 14,
   recovery_rate <- function(age, calTime, duration) ifelse(duration < time_sick, 0, Inf)
   assign("recovery_rate", recovery_rate, envir = .GlobalEnv)
   
-  mortRates <- function(age, calTime, duration) 0
+  mortRates     <- function(age, calTime, duration) 0
   assign("mortRates", mortRates, envir = .GlobalEnv)
   
   
@@ -135,15 +130,12 @@ run_sim <- function(time_sick_days = 14,
   TrMatrix_m <- cbind(c("Susceptible/Male->Infected/Male",
                         "Infected/Male->Recovered/Male"),
                       c("inc_rate_m", "recovery_rate"))
-  
   allTransitions <- rbind(TrMatrix_f, TrMatrix_m)
   absTransitions <- cbind("dead", "mortRates")
   
-  transitionMatrix <- buildTransitionMatrix(
-    allTransitions = allTransitions,
-    absTransitions = absTransitions,
-    stateSpace     = stateSpace
-  )
+  transitionMatrix <- buildTransitionMatrix(allTransitions = allTransitions,
+                                            absTransitions = absTransitions,
+                                            stateSpace      = stateSpace)
   
   
   # running the simulation --------------------------------------------------
@@ -153,38 +145,39 @@ run_sim <- function(time_sick_days = 14,
   assign("absTransitions", absTransitions, envir = .GlobalEnv)
   assign("simHorizon",     simHorizon,     envir = .GlobalEnv)
   
-  pop <- micSim(
-    initPop          = initPop,
-    transitionMatrix = transitionMatrix,
-    absStates        = absStates,
-    maxAge           = maxAge,
-    simHorizon       = simHorizon
-  )
+  pop <- micSim(initPop          = initPop,
+                transitionMatrix = transitionMatrix,
+                absStates        = absStates,
+                maxAge           = maxAge,
+                simHorizon       = simHorizon)
   
   # handling case where no transitions
   if (nrow(pop) == N & sum(is.na(pop$From)) == N) {
     # building date range
     start_d <- as.IDate(as.character(simHorizon["startDate"]), "%Y%m%d")
-    end_d   <- as.IDate(as.character(simHorizon["endDate"]), "%Y%m%d")
+    end_d   <- as.IDate(as.character(simHorizon["endDate"]),   "%Y%m%d")
     dates   <- seq(start_d, end_d, by = 1L)
     n_days  <- length(dates)
     
     # assigning metrics by sex
     metrics <- data.table(
-      sex                = rep(c("Female", "Male", "Overall"), each = n_days),
+      sex                = rep(c("Female","Male", "Overall"), each = n_days),
       date               = rep(dates, times = 3L),
-      active_inf_14d     = 0L,
+      active_inf         = 0L,
+      active_inf_7d      = 0L,
       cum_recovered      = 0L,
-      susceptible        = c(rep.int(N_female, n_days),
+      susceptible        = c(rep.int(N_female, n_days), 
                              rep.int(N_male, n_days),
                              rep.int(N, n_days)),
-      N                  = c(rep.int(N_female, n_days),
+      N                  = c(rep.int(N_female, n_days), 
                              rep.int(N_male, n_days),
                              rep.int(N, n_days)),
-      active_inf_14d_pct = 0L,
+      active_inf_pct     = 0L,
+      active_inf_7d_pct  = 0L,
       cum_recovered_pct  = 0L,
       susceptible_pct    = 100L
     )
+    
     return(metrics)
   }
   
@@ -192,18 +185,20 @@ run_sim <- function(time_sick_days = 14,
   # processing the output ---------------------------------------------------
   long <- as.data.table(convertToLongFormat(pop))
   long[, `:=`(start = as.IDate(Tstart, "%Y%m%d"),
-              stop  = as.IDate(Tstop, "%Y%m%d"))]
+              stop  = as.IDate(Tstop,  "%Y%m%d"))]
   
-  all_dates <- CJ(sex = unique(long$sex), 
-                  date = seq(min(long$start), max(long$stop), by = 1))
-  counts <- long[, .(count = uniqueN(ID)), by = .(sex, start, health)]
+  all_dates <- CJ(sex = unique(long$sex), date = seq(min(long$start), max(long$stop), by = 1))
+  counts    <- long[, .(count = uniqueN(ID)), by = .(sex, start, health)]
   
-  # getting number of infections within 14 day window
+  # getting number of infections within a window determined by time_sick_days
   inf <- merge(all_dates,
                counts[health == "Infected", .(sex, date = start, new_inf = count)],
                by = c("sex", "date"), all.x = TRUE)[
                  , new_inf := fifelse(is.na(new_inf), 0L, new_inf)][
-                   , active_inf_14d := frollsum(new_inf, 14, align = "right", fill = 0),
+                   , `:=`(
+                     active_inf    = frollsum(new_inf, time_sick_days, align = "right", fill = 0),
+                     active_inf_7d = frollsum(new_inf, 7, align = "right", fill = 0)
+                     ),
                    by = sex]
   
   # getting number recovered
@@ -219,57 +214,50 @@ run_sim <- function(time_sick_days = 14,
   sus <- merge(inf[, .(sex, date, new_inf)], init_sus, by = "sex")[
     , susceptible := init_sus - cumsum(new_inf), by = sex]
   
-  
   # combining all the metrics
   metrics_sex <- Reduce(function(x, y) merge(x, y, by = c("sex", "date")),
-                        list(inf[, .(sex, date, active_inf_14d)],
+                        list(inf[, .(sex, date, active_inf, active_inf_7d)],
                              rec[, .(sex, date, cum_recovered)],
                              sus[, .(sex, date, susceptible)]))
   
-  metric_cols <- c("active_inf_14d", "cum_recovered", "susceptible")
-  N_sex       <- data.table(sex = c("Female", "Male", "Overall"), 
-                            N = c(N_female, N_male, N))
+  metric_cols <- c("active_inf", "active_inf_7d", "cum_recovered", "susceptible")
+  N_sex       <- data.table(sex = c("Female", "Male", "Overall"), N = c(N_female, N_male, N))
   
   overall <- metrics_sex[, lapply(.SD, sum), by = date, .SDcols = metric_cols][
-    , sex := "Overall"
-  ]
+    , sex := "Overall"]
   
   metrics <- rbind(metrics_sex, overall)
   metrics <- merge(metrics, N_sex, by = "sex")
   
-  metrics[, `:=`(
-    active_inf_14d_pct = active_inf_14d / N * 100,
-    cum_recovered_pct  = cum_recovered  / N * 100,
-    susceptible_pct    = susceptible    / N * 100
-  )]
+  metrics[, `:=`(active_inf_pct    = active_inf    / N * 100,
+                 active_inf_7d_pct = active_inf_7d / N * 100,
+                 cum_recovered_pct = cum_recovered / N * 100,
+                 susceptible_pct   = susceptible   / N * 100)]
   metrics
 }
 
 
 # helper functions --------------------------------------------------------
-# Outputs key indicators from the sim
+# outputs key indicators from the sim
 summary_indicators <- function(dt) {
   list(
-    peak_inf_pct  = if (nrow(dt)) max(dt$active_inf_14d_pct, na.rm = TRUE) else NA_real_,
-    peak_inf_date = if (nrow(dt)) dt$date[which.max(dt$active_inf_14d_pct)] else as.Date(NA),
-    end_rec_pct   = if (nrow(dt)) tail(dt$cum_recovered_pct, 1) else NA_real_
+    peak_inf_pct  = if (nrow(dt)) max(dt$active_inf_7d_pct, na.rm = TRUE) else NA_real_,
+    peak_inf_date = if (nrow(dt)) dt$date[which.max(dt$active_inf_7d_pct)] else as.Date(NA),
+    end_rec_pct   = if (nrow(dt)) tail(dt$cum_recovered_pct, 1) else NA_real_,
+    end_sus_pct   = if (nrow(dt)) tail(dt$susceptible_pct, 1) else NA_real_
   )
 }
 
-# formatting numbers
+# formatting percentages
 fmt_pct <- function(x, d=1) ifelse(is.finite(x), sprintf(paste0("%0.", d, "f%%"), x), "—")
 
-# assigning labels and colors to different indicators. 
+# assigning colors and line types to different indicators. 
 # using SOEP colors for now
-metric_labels <- c(
-  active_inf_14d_pct = "Infected (14-day active)",
-  cum_recovered_pct  = "Recovered (cumulative)",
-  susceptible_pct    = "Susceptible"
-)
 metric_colors <- c(
-  "Infected (14-day active)" = "#ae393f",
-  "Recovered (cumulative)"   = "#00786b", 
-  "Susceptible"              = "#5e7c8f"  
+  active_inf_pct    = "#5c5c5c",
+  active_inf_7d_pct = "#ae393f",
+  cum_recovered_pct = "#00786b",
+  susceptible_pct   = "#000000"
 )
 linetype_vals <- c("Baseline" = "solid", "Intervention" = "longdash")
 
@@ -297,27 +285,32 @@ filter_sex <- function(dt, by_sex) {
 }
 
 # outputs the values from summary_indicators() to the ui
-output_indicators_row <- function(df, label = "", title_prefix = "") {
+output_indicators_row <- function(df, label = "", title_prefix = "", days = 14) {
   ind <- summary_indicators(df)
   suffix <- if (nzchar(label)) paste0(" — ", label) else ""
   fluidRow(
-    column(4, indicator_box(
-      paste0(title_prefix, "Peak infected (14-day active)", suffix),
+    column(3, indicator_box(
+      paste0(title_prefix, "Peak infected (7-day total)", suffix),
+      #sprintf("%sPeak infected (%d-day active)%s", title_prefix, days, suffix),
       fmt_pct(ind$peak_inf_pct)
     )),
-    column(4, indicator_box(
+    column(3, indicator_box(
       paste0(title_prefix, "Peak date", suffix),
       format(ind$peak_inf_date, "%b %d, %Y")
     )),
-    column(4, indicator_box(
+    column(3, indicator_box(
       paste0(title_prefix, "Recovered by end", suffix),
       fmt_pct(ind$end_rec_pct)
+    )),
+    column(3, indicator_box(
+      paste0(title_prefix, "Susceptible by end", suffix),
+      fmt_pct(ind$end_sus_pct)
     ))
   )
 }
 
 
-# ui ----------------------------------------------------------------------
+# shiny UI ----------------------------------------------------------------
 ui <- fluidPage(
   titlePanel("Simulation of COVID-19 Infections in Germany (2020–2021)"),
   sidebarLayout(
@@ -325,18 +318,24 @@ ui <- fluidPage(
       width = 3,
       
       h4("Cohort & disease"),
-      numericInput("N", "Sample size (N)", value = 1000, min = 1000, max = 10000, step = 500),
-      sliderInput("minage_start", "Minimum age at start", min = 0, max = 100, value = 18),
-      sliderInput("maxage_start", "Maximum age at start", min = 0, max = 100, value = 80),
-      numericInput("time_sick", "Duration of illness (days)", value = 14, min = 1, max = 60),
+      numericInput("N", "Sample size (N)",
+                   value = 1000, min = 1000,
+                   max = 20000, step = 500),
+      sliderInput("minage_start", "Minimum age at start",
+                  min = 0,  max = 100, value = 18),
+      sliderInput("maxage_start", "Maximum age at start",
+                  min = 0,  max = 100, value = 80),
+      numericInput("time_sick", "Duration of illness (days)",
+                   value = 14,  min = 1,  max = 60),
       
       tags$hr(),
       h4("Intervention scenario"),
-      sliderInput("effect_int", "Intervention effectiveness (%)", min = 0, max = 100, value = 0, step = 1),
+      sliderInput("effect_int", "Intervention effectiveness (%)",
+                  min = 0,  max = 99, value = 0, step = 1),
       bsPopover(
-        id = "effect_int",
-        title = "What does this do?",
-        content = paste(
+        id        = "effect_int",
+        title     = "What does this do?",
+        content   = paste(
           "This applies a percentage reduction to all the incidence rates.",
           "For example, 25% means the incidence rates are all multiplied by 0.75."
         ),
@@ -345,7 +344,7 @@ ui <- fluidPage(
       ),
       conditionalPanel(
         condition = "input.effect_int > 0",
-        dateInput("date_int", "Intervention starts", value = "2020-11-01",
+        dateInput("date_int", "Intervention starts", value = "2021-01-01",
                   min = "2020-01-01", max = "2021-12-31", format = "yyyy-mm-dd"),
         checkboxInput("compare_baseline", "Compare intervention against baseline", FALSE)
       ),
@@ -354,20 +353,22 @@ ui <- fluidPage(
       h4("Display options"),
       checkboxInput("by_sex", "Break down by sex", FALSE),
       checkboxGroupInput("series", "Show series",
-                         choices = c("Infected (14-day active)" = "inf",
-                                     "Recovered (cumulative)"  = "rec",
-                                     "Susceptible"             = "sus"),
-                         selected = c("inf", "rec")),
+                         choices = c(
+                           "Infected (7-day total)"               = "inf7",
+                           "Infected (active, user-set duration)" = "inf",
+                           "Recovered (cumulative)"               = "rec",
+                           "Susceptible"                          = "sus"
+                         ),
+                         selected = c("inf7", "rec")),
       
       actionButton("run", "Run simulation", class = "btn-primary")
     ),
-    
     mainPanel(
       width = 9,
       uiOutput("indicators_summary"),
       conditionalPanel(
         condition = "input.effect_int > 0 && input.compare_baseline == true",
-        uiOutput("indicator_deltas")
+        uiOutput("indicator_diff")
       ),
       plotOutput("epiPlot", height = "600px"),
       div(class = "mt-3",
@@ -378,8 +379,11 @@ ui <- fluidPage(
 )
 
 
-# server ------------------------------------------------------------------
+# Shiny server ------------------------------------------------------------
 server <- function(input, output, session) {
+  
+  
+  # validation --------------------------------------------------------------
   # keep age sliders consistent
   observeEvent(input$minage_start, {
     if (input$minage_start > input$maxage_start)
@@ -403,11 +407,13 @@ server <- function(input, output, session) {
     )
   })
   
-  # run sims
+  
+  # running the simulation(s) -----------------------------------------------
   sims <- eventReactive(input$run, {
     validate_inputs()
     compare_mode <- (input$effect_int > 0) && isTRUE(input$compare_baseline)
     
+    # if comparing baseline and intervention, run both
     if (compare_mode) {
       withProgress(message = "Running baseline and intervention...", value = 0.1, {
         # run baseline scenario 
@@ -430,7 +436,7 @@ server <- function(input, output, session) {
           date_int       = input$date_int
         )
         incProgress(0.9, detail = "Intervention done…")
-        list(mode = "compare", baseline = base, intervention = interv)
+        list(mode = "compare", baseline = base, intervention = interv, time_sick = input$time_sick)
       })
     } 
     else {
@@ -454,14 +460,17 @@ server <- function(input, output, session) {
           )
         }
         incProgress(0.9)
-        list(mode = "single", scenario = scen)
+        list(mode = "single", scenario = scen, time_sick = input$time_sick)
       })
     }
   })
   
+  
+  # summary figures ---------------------------------------------------------
   # getting key indicators
   output$indicators_summary <- renderUI({
     s <- sims(); req(s)
+    days <- s$time_sick
     
     if (s$mode == "single") {
       dat <- filter_sex(s$scenario, input$by_sex)
@@ -474,27 +483,30 @@ server <- function(input, output, session) {
     if (isTRUE(input$by_sex)) {
       df <- dat[sex == "Female"]; dm <- dat[sex == "Male"]
       tagList(
-        output_indicators_row(df, "Female", prefix),
-        output_indicators_row(dm, "Male",   prefix)
+        output_indicators_row(df, "Female", prefix, days = days),
+        output_indicators_row(dm, "Male",   prefix, days = days)
       )
     } else {
-      output_indicators_row(dat, "", prefix)
+      output_indicators_row(dat, "", prefix, days = days)
     }
   })
   
   # calculating differences when compare is on
-  output$indicator_deltas <- renderUI({
+  output$indicator_diff <- renderUI({
     s <- sims(); req(s$mode == "compare", s$baseline, s$intervention)
     
     make_boxes <- function(slice_label, db, di) {
       kb <- summary_indicators(db); ki <- summary_indicators(di)
-      d_peak <- ki$peak_inf_pct - kb$peak_inf_pct
-      d_end  <- ki$end_rec_pct  - kb$end_rec_pct
+      d_peak     <- ki$peak_inf_pct - kb$peak_inf_pct
+      d_end_rec  <- ki$end_rec_pct  - kb$end_rec_pct
+      d_end_sus  <- ki$end_sus_pct  - kb$end_sus_pct
       fluidRow(
-        column(6, indicator_box(paste0("Δ Peak infected (pp) — ", slice_label),
+        column(4, indicator_box(paste0("Δ Peak infected (pp) — ", slice_label),
                                 sprintf("%+0.1f pp (%s vs %s)", d_peak, fmt_pct(ki$peak_inf_pct), fmt_pct(kb$peak_inf_pct)))),
-        column(6, indicator_box(paste0("Δ Recovered by end (pp) — ", slice_label),
-                                sprintf("%+0.1f pp (%s vs %s)", d_end,  fmt_pct(ki$end_rec_pct),  fmt_pct(kb$end_rec_pct))))
+        column(4, indicator_box(paste0("Δ Recovered by end (pp) — ", slice_label),
+                                sprintf("%+0.1f pp (%s vs %s)", d_end_rec,  fmt_pct(ki$end_rec_pct),  fmt_pct(kb$end_rec_pct)))),
+        column(4, indicator_box(paste0("Δ Susceptible by end (pp) — ", slice_label),
+                                sprintf("%+0.1f pp (%s vs %s)", d_end_sus,  fmt_pct(ki$end_sus_pct),  fmt_pct(kb$end_sus_pct))))
       )
     }
     
@@ -515,15 +527,31 @@ server <- function(input, output, session) {
     }
   })
   
-  # plotting output
+  
+  # plots -------------------------------------------------------------------
+  # assigning labels to indicators
+  metric_labels <- reactive({
+    days <- req(sims())$time_sick
+    c(
+      active_inf_pct    = sprintf("Infected (%d-day active)", days),
+      active_inf_7d_pct = "Infected (7-day total)",
+      cum_recovered_pct = "Recovered (cumulative)",
+      susceptible_pct   = "Susceptible"
+    )
+  })
+  
+  # generating the plots
   plotObj <- reactive({
     s <- sims(); req(s)
     
-    y_map <- list(inf = "active_inf_14d_pct",
-                  rec = "cum_recovered_pct",
-                  sus = "susceptible_pct")
+    y_map <- list(inf  = "active_inf_pct",
+                  inf7 = "active_inf_7d_pct",
+                  rec  = "cum_recovered_pct",
+                  sus  = "susceptible_pct")
     chosen <- unlist(y_map[input$series], use.names = FALSE); req(length(chosen) > 0)
-    chosen_labels <- unname(metric_labels[chosen])
+    
+    # getting labels for plots
+    labs_map <- metric_labels()
     
     # extracting simulation output
     if (s$mode == "compare") {
@@ -543,17 +571,19 @@ server <- function(input, output, session) {
       variable.name = "metric",
       value.name    = "pct"
     )
-    long[, metric := factor(metric, levels = names(metric_labels),
-                            labels = unname(metric_labels))]
+    long[, metric := factor(metric, levels = names(labs_map))]
     
-    # making plots
     p <- ggplot(long, aes(x = date, y = pct, colour = metric)) +
       geom_line(linewidth = 0.9) +
-      scale_colour_manual(values = metric_colors,
-                          breaks = chosen_labels, limits = chosen_labels, name = "Metric") +
-      scale_y_continuous(labels = scales::label_percent(accuracy = 0.1, scale = 1)) +
-      labs(x = "Date", y = "Percent of cohort") +
-      theme_minimal(base_size = 14) +
+      scale_colour_manual(
+        values = metric_colors[names(labs_map)],
+        breaks = names(labs_map),
+        labels = unname(labs_map),
+        name = "Metric"
+      ) +
+      scale_y_continuous(labels = scales::comma_format(accuracy = 0.1)) +
+      labs(x = "Date", y = "Percentage of total cohort", colour = NULL) +
+      theme_light(base_size = 14) +
       theme(legend.position = "top")
     
     # conditional things added to figure based on the users selections
@@ -576,9 +606,11 @@ server <- function(input, output, session) {
     
     p
   })
+  
   output$epiPlot <- renderPlot({ plotObj() })
   
-  # allow the user to download the output
+  
+  # download output ---------------------------------------------------------
   output$dl_csv <- downloadHandler(
     filename = function() sprintf("simulation_metrics_%s.csv", Sys.Date()),
     content = function(file) {
@@ -603,6 +635,6 @@ server <- function(input, output, session) {
 }
 
 
-# ----------------------------- launch ---------------------------------------
+# launch ------------------------------------------------------------------
 app <- shinyApp(ui = ui, server = server)
 app
