@@ -1,6 +1,6 @@
 ###############################################################################
 # app.R – Shiny demo, which simulates COVID-19 infections between 2020 and 2021
-# Date  : 2025-08-19
+# Date  : 2025-09-08
 ###############################################################################
 
 # needed when setting-up shinylive, so packages are correctly included
@@ -44,7 +44,7 @@ run_sim <- function(time_sick_days = 14,
   # checking if the input is valid
   stopifnot(prop_female  >= 0, prop_female <= 1,
             effect_int   >= 0, effect_int  <= 1,
-            N > 0, time_sick_days > 0)
+            N >= 100, time_sick_days > 0)
   
   # defining initial variables
   time_sick <- time_sick_days / 365
@@ -184,8 +184,8 @@ run_sim <- function(time_sick_days = 14,
   
   # processing the output ---------------------------------------------------
   long <- as.data.table(convertToLongFormat(pop))
-  long[, `:=`(start = as.IDate(Tstart, "%Y%m%d"),
-              stop  = as.IDate(Tstop,  "%Y%m%d"))]
+  long[, `:=`(start = fix_yyyymmdd(Tstart),
+              stop  = fix_yyyymmdd(Tstop))]
   
   all_dates <- CJ(sex = unique(long$sex), date = seq(min(long$start), max(long$stop), by = 1))
   counts    <- long[, .(count = uniqueN(ID)), by = .(sex, start, health)]
@@ -198,7 +198,7 @@ run_sim <- function(time_sick_days = 14,
                    , `:=`(
                      active_inf    = frollsum(new_inf, time_sick_days, align = "right", fill = 0),
                      active_inf_7d = frollsum(new_inf, 7, align = "right", fill = 0)
-                     ),
+                   ),
                    by = sex]
   
   # getting number recovered
@@ -257,7 +257,7 @@ metric_colors <- c(
   active_inf_pct    = "#5c5c5c",
   active_inf_7d_pct = "#ae393f",
   cum_recovered_pct = "#00786b",
-  susceptible_pct   = "#000000"
+  susceptible_pct   = "#9467bd" 
 )
 linetype_vals <- c("Baseline" = "solid", "Intervention" = "longdash")
 
@@ -282,6 +282,43 @@ indicator_dual <- function(title, female_value, male_value) {
 # drops overall group when the user wants to see results by sex
 filter_sex <- function(dt, by_sex) {
   if (isTRUE(by_sex)) dt[sex != "Overall"] else dt[sex == "Overall"]
+}
+
+# fixes issues where dates in yyyymmdd format are invalid, e.g., 20210229
+# any day past the end of the month is assumed to have occured on the last day
+# of the month
+fix_yyyymmdd <- function(x) {
+  # trying the simple conversion first and returns if no errors
+  out <- data.table::as.IDate(x, "%Y%m%d")
+  bad <- is.na(out) & !is.na(x)
+  if (!any(bad)) return(out)
+  
+  # if there are errors, fixing them
+  # this first part mimics the existing code in getInDateFormat
+  xi <- as.integer(x[bad])
+  y  <- xi %/% 10000L
+  m  <- (xi %/% 100L) %% 100L
+  d  <- xi %% 100L
+  
+  # safeguarding against month being 13. If the month is 13, interprets
+  # it as January of the next year
+  y <- y + (m == 13L)
+  m[m == 13L] <- 1L
+  
+  # handling incorrect number of days in a month
+  # determining max number of days in a month (with leap years)
+  dim_month <- c(31L,28L,31L,30L,31L,30L,31L,31L,30L,31L,30L,31L)
+  maxd      <- dim_month[m]
+  is_leap   <- (y %% 400L == 0L) | ((y %% 4L == 0L) & (y %% 100L != 0L))
+  feb_idx   <- (m == 2L)
+  if (any(feb_idx)) maxd[feb_idx] <- 28L + as.integer(is_leap[feb_idx])
+  
+  # ensuring the day value is between 1 and max number of day
+  d <- pmax.int(1L, pmin.int(d, maxd))
+  
+  # returning a date
+  out[bad] <- data.table::as.IDate(sprintf("%04d%02d%02d", y, m, d), "%Y%m%d")
+  out
 }
 
 # outputs the values from summary_indicators() to the ui
@@ -320,13 +357,13 @@ ui <- fluidPage(
       h4("Cohort & disease"),
       numericInput("N", "Sample size (N)",
                    value = 1000, min = 1000,
-                   max = 20000, step = 500),
+                   max = 30000, step = 1000),
       sliderInput("minage_start", "Minimum age at start",
                   min = 0,  max = 100, value = 18),
       sliderInput("maxage_start", "Maximum age at start",
                   min = 0,  max = 100, value = 80),
       numericInput("time_sick", "Duration of illness (days)",
-                   value = 14,  min = 1,  max = 60),
+                   value = 14,  min = 1,  max = 60, step = 1),
       
       tags$hr(),
       h4("Intervention scenario"),
@@ -394,23 +431,17 @@ server <- function(input, output, session) {
       updateSliderInput(session, "minage_start", value = input$maxage_start)
   })
   
-  # validation
-  validate_inputs <- reactiveVal(NULL)
-  observeEvent(input$run, {
-    validate_inputs(
-      validate(
-        need(input$N > 0, "Sample size must be positive."),
-        need(input$time_sick > 0, "Duration of illness must be positive."),
-        need(file.exists(incMalePath) && file.exists(incFemalePath),
-             "Incidence data not found in the data folder.")
-      )
-    )
-  })
-  
   
   # running the simulation(s) -----------------------------------------------
   sims <- eventReactive(input$run, {
-    validate_inputs()
+    validate(
+      need(input$N >= 1000, "Sample size must be at least 1,000 (larger values are recommended)."),
+      need(input$time_sick > 0, "Duration of illness must be positive."),
+      need((input$time_sick %% 1) == 0, "Duration of illness must be a whole number."),
+      need(file.exists(incMalePath) && file.exists(incFemalePath),
+           "Incidence data not found in the data folder.")
+    )
+    
     compare_mode <- (input$effect_int > 0) && isTRUE(input$compare_baseline)
     
     # if comparing baseline and intervention, run both

@@ -126,7 +126,7 @@ week_in_years <- 1 / 52
 
 # adding the missing female rows and converting all NA to 0
 # the incidence rates are number of new cases per 100,000 people during 
-# a week. I'm converting this to a rate 
+# a week. I'm converting this to a yearly rate as micsim works in years 
 complete_data <- all_weeks %>%
   bind_rows(missing_fem) %>%
   arrange(Year, Week) %>%
@@ -176,6 +176,10 @@ datatable(
 write_csv(complete_data, file = here("data", "SurvStat_complete_data.csv"))
 write_csv(complete_m, file = here("data", "SurvStat_male_data.csv"))
 write_csv(complete_f, file = here("data", "SurvStat_female_data.csv"))
+
+saveRDS(complete_data, file = here("data", "SurvStat_complete_data.rds"))
+saveRDS(complete_m, file = here("data", "SurvStat_male_data.rds"))
+saveRDS(complete_f, file = here("data", "SurvStat_female_data.rds"))
 ```
 
 ## Reproducibility
