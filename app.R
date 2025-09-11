@@ -279,6 +279,13 @@ indicator_dual <- function(title, female_value, male_value) {
               tags$div(class = "h4 mb-0", male_value))))
 }
 
+# Workaround for Chromium Issue 468227
+downloadButton <- function(...) {
+  tag <- shiny::downloadButton(...)
+  tag$attribs$download <- NULL
+  tag
+}
+
 # drops overall group when the user wants to see results by sex
 filter_sex <- function(dt, by_sex) {
   if (isTRUE(by_sex)) dt[sex != "Overall"] else dt[sex == "Overall"]
@@ -644,27 +651,23 @@ server <- function(input, output, session) {
   # download output ---------------------------------------------------------
   output$dl_csv <- downloadHandler(
     filename = function() sprintf("simulation_metrics_%s.csv", Sys.Date()),
-    contentType = "text/csv; charset=utf-8",
     content = function(file) {
       s <- sims(); req(s)
-      out <- if (s$mode == "compare") {
+      if (s$mode=="compare") {
         b <- data.table::copy(s$baseline)[, scenario := "Baseline"]
         i <- data.table::copy(s$intervention)[, scenario := "Intervention"]
-        rbind(b, i, use.names = TRUE)
+        out <- rbind(b, i, use.names = TRUE)
       } else {
-        data.table::copy(s$scenario)[, scenario := if (input$effect_int > 0) "Intervention" else "Baseline"]
+        out <- data.table::copy(s$scenario)[, scenario := if (input$effect_int > 0) "Intervention" else "Baseline"]
       }
-      write.csv(out, file, row.names = FALSE, fileEncoding = "UTF-8")
+      data.table::fwrite(out, file)
     }
   )
-  
   output$dl_png <- downloadHandler(
     filename = function() sprintf("simulation_plot_%s.png", Sys.Date()),
-    contentType = "image/png",
     content = function(file) {
-      png(file, width = 1000, height = 600, res = 150)
-      print(plotObj())
-      dev.off()
+      p <- plotObj()
+      ggplot2::ggsave(filename = file, plot = p, width = 10, height = 6, dpi = 150)
     }
   )
 }
