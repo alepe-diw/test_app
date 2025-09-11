@@ -647,12 +647,12 @@ server <- function(input, output, session) {
     contentType = "text/csv; charset=utf-8",
     content = function(file) {
       s <- sims(); req(s)
-      if (s$mode=="compare") {
+      out <- if (s$mode == "compare") {
         b <- data.table::copy(s$baseline)[, scenario := "Baseline"]
         i <- data.table::copy(s$intervention)[, scenario := "Intervention"]
-        out <- rbind(b, i, use.names = TRUE)
+        rbind(b, i, use.names = TRUE)
       } else {
-        out <- data.table::copy(s$scenario)[, scenario := if (input$effect_int > 0) "Intervention" else "Baseline"]
+        data.table::copy(s$scenario)[, scenario := if (input$effect_int > 0) "Intervention" else "Baseline"]
       }
       write.csv(out, file, row.names = FALSE, fileEncoding = "UTF-8")
     }
@@ -662,8 +662,9 @@ server <- function(input, output, session) {
     filename = function() sprintf("simulation_plot_%s.png", Sys.Date()),
     contentType = "image/png",
     content = function(file) {
-      p <- plotObj()
-      ggplot2::ggsave(filename = file, plot = p, width = 10, height = 6, dpi = 150, device = "png")
+      png(file, width = 1000, height = 600, res = 150)
+      print(plotObj())
+      dev.off()
     }
   )
 }
