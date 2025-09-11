@@ -644,6 +644,7 @@ server <- function(input, output, session) {
   # download output ---------------------------------------------------------
   output$dl_csv <- downloadHandler(
     filename = function() sprintf("simulation_metrics_%s.csv", Sys.Date()),
+    contentType = "text/csv; charset=utf-8",
     content = function(file) {
       s <- sims(); req(s)
       if (s$mode=="compare") {
@@ -653,14 +654,16 @@ server <- function(input, output, session) {
       } else {
         out <- data.table::copy(s$scenario)[, scenario := if (input$effect_int > 0) "Intervention" else "Baseline"]
       }
-      data.table::fwrite(out, file)
+      write.csv(out, file, row.names = FALSE, fileEncoding = "UTF-8")
     }
   )
+  
   output$dl_png <- downloadHandler(
     filename = function() sprintf("simulation_plot_%s.png", Sys.Date()),
+    contentType = "image/png",
     content = function(file) {
       p <- plotObj()
-      ggplot2::ggsave(filename = file, plot = p, width = 10, height = 6, dpi = 150)
+      ggplot2::ggsave(filename = file, plot = p, width = 10, height = 6, dpi = 150, device = "png")
     }
   )
 }
