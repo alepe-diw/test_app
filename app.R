@@ -25,10 +25,47 @@ simHorizon  <- c(startDate = startDate, endDate = endDate)
 maxAge      <- 101
 absStates   <- "dead"      # required by MicSim
 
-# setting path to data
-incMalePath   <- "./data/SurvStat_male_data.rds"
-incFemalePath <- "./data/SurvStat_female_data.rds"
 
+# function to load the incidence data -------------------------------------
+load_incidence_for_region <- function(region_choice) {
+  if (region_choice == "national") {
+    male_path   <- "./data/SurvStat_male_data.rds"
+    female_path <- "./data/SurvStat_female_data.rds"
+    
+    inc_dat_m_raw <- readRDS(male_path)
+    inc_dat_f_raw <- readRDS(female_path)
+    
+    inc_dat_m <- data.table::as.data.table(inc_dat_m_raw)
+    inc_dat_f <- data.table::as.data.table(inc_dat_f_raw)
+    
+  } else {
+    male_path   <- paste0("./data/SurvStat_states_male_data.rds")
+    female_path <- paste0("./data/SurvStat_states_female_data.rds")
+    
+    inc_dat_m_full <- readRDS(male_path)
+    inc_dat_f_full <- readRDS(female_path)
+    
+    # keep only rows for this region (safety) and drop State column
+    inc_dat_m <- data.table::as.data.table(inc_dat_m_full)[State == region_choice]
+    inc_dat_m[, State := NULL]
+    
+    inc_dat_f <- data.table::as.data.table(inc_dat_f_full)[State == region_choice]
+    inc_dat_f[, State := NULL]
+  }
+  
+  # At this point:
+  
+  # Build decYears and hazard matrices in the format run_sim expects
+  decYears  <- c(2020, inc_dat_m[[1]])
+  inc_mat_m <- as.matrix(inc_dat_m[, -1])
+  inc_mat_f <- as.matrix(inc_dat_f[, -1])
+  
+  list(
+    decYears  = decYears,
+    inc_mat_m = inc_mat_m,
+    inc_mat_f = inc_mat_f
+  )
+}
 
 # function to run the sim -------------------------------------------------
 # defining a function to run the simulation,
@@ -39,7 +76,10 @@ run_sim <- function(time_sick_days = 14,
                     date_int       = as.Date("2020-01-01"),
                     minage_start   = 18,
                     maxage_start   = 80,
-                    N              = 1000) {
+                    N              = 1000,
+                    decYears,
+                    inc_mat_m,
+                    inc_mat_f) {
   
   # checking if the input is valid
   stopifnot(prop_female  >= 0, prop_female <= 1,
@@ -56,6 +96,9 @@ run_sim <- function(time_sick_days = 14,
   
   # seed for reproducibility
   set.seed(9876)
+  
+  # deriving ageBands from incidence matrices
+  ageBands <- ncol(inc_mat_m)
   
   
   # defining initial pop ----------------------------------------------------
@@ -77,16 +120,6 @@ run_sim <- function(time_sick_days = 14,
     initState = c(rep("Susceptible/Female", N_female),
                   rep("Susceptible/Male", N_male))
   )
-  
-  
-  # loading the data --------------------------------------------------------
-  inc_dat_m <- readRDS(incMalePath)
-  inc_dat_f <- readRDS(incFemalePath)
-  
-  decYears  <- c(2020, inc_dat_m[[1]])
-  inc_mat_m <- as.matrix(inc_dat_m[,-1])
-  inc_mat_f <- as.matrix(inc_dat_f[,-1])
-  ageBands  <- ncol(inc_mat_m)
   
   
   # defining transition rates -----------------------------------------------
@@ -362,6 +395,30 @@ ui <- fluidPage(
       width = 3,
       
       h4("Cohort & disease"),
+      selectInput(
+        "region_choice",
+        label = "Region to simulate",
+        choices = c(
+          "Germany (national)" = "national",
+          "Baden-Württemberg"  = "baden-wurttemberg",
+          "Bavaria"            = "bavaria",
+          "Berlin"             = "berlin",
+          "Brandenburg"        = "brandenburg",
+          "Bremen"             = "bremen",
+          "Hamburg"            = "hamburg",
+          "Hesse"              = "hesse",
+          "Lower Saxony"       = "lower-saxony",
+          "Mecklenburg-Vorpommern" = "mecklenburg-vorpommern",
+          "North Rhine-Westphalia" = "north-rhine-westphalia",
+          "Rhineland-Palatinate"   = "rhineland-palatinate",
+          "Saarland"               = "saarland",
+          "Saxony"                 = "saxony",
+          "Saxony-Anhalt"          = "saxony-anhalt",
+          "Schleswig-Holstein"     = "schleswig-holstein",
+          "Thuringia"              = "thuringia"
+        ),
+        selected = "national"
+      ),
       numericInput("N", "Sample size (N)",
                    value = 1000, min = 1000,
                    max = 30000, step = 1000),
@@ -445,9 +502,19 @@ server <- function(input, output, session) {
       need(input$N >= 1000, "Sample size must be at least 1,000 (larger values are recommended)."),
       need(input$time_sick > 0, "Duration of illness must be positive."),
       need((input$time_sick %% 1) == 0, "Duration of illness must be a whole number."),
-      need(file.exists(incMalePath) && file.exists(incFemalePath),
-           "Incidence data not found in the data folder.")
+      need({
+        if (input$region_choice == "national") {
+          file.exists("./data/SurvStat_male_data.rds") &&
+            file.exists("./data/SurvStat_female_data.rds")
+        } else {
+          file.exists(paste0("./data/SurvStat_states_male_data.rds")) &&
+            file.exists(paste0("./data/SurvStat_states_female_data.rds"))
+        }
+      }, "Incidence data not found for that region.")
     )
+    
+    # loading incidence data
+    inc_stuff <- load_incidence_for_region(input$region_choice)
     
     compare_mode <- (input$effect_int > 0) && isTRUE(input$compare_baseline)
     
@@ -460,7 +527,10 @@ server <- function(input, output, session) {
           effect_int     = 0,
           minage_start   = input$minage_start,
           maxage_start   = input$maxage_start,
-          N              = input$N
+          N              = input$N,
+          decYears       = inc_stuff$decYears,
+          inc_mat_m      = inc_stuff$inc_mat_m,
+          inc_mat_f      = inc_stuff$inc_mat_f
         )
         incProgress(0.5, detail = "Baseline done…")
         
@@ -471,7 +541,10 @@ server <- function(input, output, session) {
           minage_start   = input$minage_start,
           maxage_start   = input$maxage_start,
           N              = input$N,
-          date_int       = input$date_int
+          date_int       = input$date_int,
+          decYears       = inc_stuff$decYears,
+          inc_mat_m      = inc_stuff$inc_mat_m,
+          inc_mat_f      = inc_stuff$inc_mat_f
         )
         incProgress(0.9, detail = "Intervention done…")
         list(mode = "compare", baseline = base, intervention = interv, time_sick = input$time_sick)
@@ -486,7 +559,10 @@ server <- function(input, output, session) {
             minage_start   = input$minage_start,
             maxage_start   = input$maxage_start,
             N              = input$N,
-            date_int       = input$date_int
+            date_int       = input$date_int,
+            decYears       = inc_stuff$decYears,
+            inc_mat_m      = inc_stuff$inc_mat_m,
+            inc_mat_f      = inc_stuff$inc_mat_f
           )
         } else {
           scen <- run_sim(
@@ -494,7 +570,10 @@ server <- function(input, output, session) {
             effect_int     = input$effect_int / 100,
             minage_start   = input$minage_start,
             maxage_start   = input$maxage_start,
-            N              = input$N
+            N              = input$N,
+            decYears       = inc_stuff$decYears,
+            inc_mat_m      = inc_stuff$inc_mat_m,
+            inc_mat_f      = inc_stuff$inc_mat_f
           )
         }
         incProgress(0.9)
