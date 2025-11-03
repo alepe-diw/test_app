@@ -397,7 +397,7 @@ ui <- fluidPage(
       h4("Cohort & disease"),
       selectInput(
         "region_choice",
-        label = "Region to simulate",
+        label = "Region",
         choices = c(
           "Germany (national)" = "national",
           "Baden-Württemberg"  = "baden-wurttemberg",

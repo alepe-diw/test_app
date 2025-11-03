@@ -18,10 +18,17 @@ The app is also available as an online demo via [GitHub Pages](https://bieneschw
 
 -   data/
 
-    -   SurvStat_complete_data - All the processed data in both CSV and RDS formats
-    -   SurvStat_female_data - Processed data for females in both CSV and RDS formats
-    -   SurvStat_male_data - Processed data for males in both CSV and RDS formats
-    -   weekly - Folder with all the raw weekly data files from SurvStat\@RKI 2.0
+    -   National (processed)
+        -   SurvStat_complete_data - All the processed data in both CSV and RDS formats
+        -   SurvStat_female_data - Processed data for females in both CSV and RDS formats
+        -   SurvStat_male_data - Processed data for males in both CSV and RDS formats
+    -   State (processed)
+        -   SurvStat_states_complete_data - All the processed data in both CSV and RDS formats
+        -   SurvStat_states_female_data - Processed data for females in both CSV and RDS formats
+        -   SurvStat_states_male_data - Processed data for males in both CSV and RDS formats
+    -   Raw weekly data from SurvStat\@RKI 2.0
+        -   weekly - National data
+        -   regional - State level data
 
 -   shinycovid-simulation.png – Example output (screenshot)
 
@@ -51,7 +58,7 @@ If you run the tool with **all default settings**, the output should match the s
 
 ## How the projection tool works
 
-1.  Import infection rates: Weekly SARS‑CoV‑2 infection rates for 2020–2021 are read from `data/weekly/` (source: Robert Koch Institute – SurvStat\@RKI 2.0).
+1.  Import infection rates: Weekly SARS‑CoV‑2 infection rates for 2020–2021 from SurvStat\@RKI 2.0 for either Germany (national) or the selected state
 2.  Generate a synthetic cohort: `N` individuals are sampled with uniform ages between the user‑chosen age range and the sample is evenly split by sex.
 3.  Microsimulation (using MicSim): Each individual can move through the states `Susceptible → Infected → Recovered`
     -   Transition rates can be scaled by `1 – (intervention effectiveness / 100)` starting on the selected `intervention date`.
@@ -66,6 +73,8 @@ If you run the tool with **all default settings**, the output should match the s
 
 ## Inputs (left panel)
 
+-   **Region**: Germany (national) or any Bundesland
+
 -   **Sample size (N):** 1,000–30,000
 
     *Note: Values above 30,000 can also be used, but the simulation will run more slowly.*
@@ -76,9 +85,9 @@ If you run the tool with **all default settings**, the output should match the s
 
 -   **Intervention effectiveness (%):** percentage reduction in incidence
 
--   **Intervention starts:** date when the intervention begins
+    -   **Intervention starts:** date when the intervention begins
 
--   **Compare intervention against baseline:** run both a baseline scenario (without intervention) and an intervention scenario, and compare the results
+    -   **Compare intervention against baseline:** run both a baseline scenario (without intervention) and an intervention scenario, and compare the results
 
 -   **Break down by sex:** Display plots and indicators by sex (Female/Male)
 
