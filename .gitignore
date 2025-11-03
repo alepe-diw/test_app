@@ -5,5 +5,5 @@ manual_run.R
 .Ruserdata
 micsim-related*
 00_prepping_rki_data.html
-00_prepping_rki_data/
+00_prepping_rki_data_files/
 tmp_data/

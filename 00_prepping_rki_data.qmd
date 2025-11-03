@@ -314,19 +314,7 @@ process_state <- function(state_dir, output_dir = here("data", "regional")) {
     filter(Sex == "female") %>%
     select(State, week_end_num, "A00":last_col())
 
-  # export per-state
-  # file stems like "berlin"
-  out_stem <- file.path(output_dir, paste0("SurvStat_", state_name))
-
-  write_csv(complete_data, paste0(out_stem, "_complete_data.csv"))
-  write_csv(complete_m,    paste0(out_stem, "_male_data.csv"))
-  write_csv(complete_f,    paste0(out_stem, "_female_data.csv"))
-
-  saveRDS(complete_data, paste0(out_stem, "_complete_data.rds"))
-  saveRDS(complete_m,    paste0(out_stem, "_male_data.rds"))
-  saveRDS(complete_f,    paste0(out_stem, "_female_data.rds"))
-
-  # return a list so we can combine across states
+  # return a list with all the data
   list(
     state  = state_name,
     full   = complete_data,
